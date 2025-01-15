@@ -1,7 +1,7 @@
 import math
 import random
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 BLACK = 1
 WHITE = 2
@@ -79,6 +79,20 @@ class weareteamphysAI:
                     score -= weights[y][x]
         return score
 
+    def simulate_move(self, board, stone, move):
+        scores = 0
+        simulated_board = self.apply_move(board, stone, move[0], move[1])
+        current_stone = 3 - stone
+        for _ in range(3):  # 最大3手のランダムプレイアウト
+            valid_moves = self.get_valid_moves(simulated_board, current_stone)
+            if not valid_moves:
+                break
+            random_move = random.choice(valid_moves)
+            simulated_board = self.apply_move(simulated_board, current_stone, random_move[0], random_move[1])
+            current_stone = 3 - current_stone
+        scores += self.evaluate_board(simulated_board, stone)
+        return scores
+
     def mcts(self, board, stone):
         start_time = time.time()
         moves = self.get_valid_moves(board, stone)
@@ -86,29 +100,16 @@ class weareteamphysAI:
             return None
         move_scores = {move: 0 for move in moves}
 
-        def simulate_move(move):
-            scores = 0
-            simulated_board = self.apply_move(board, stone, move[0], move[1])
-            current_stone = 3 - stone
-            for _ in range(3):  # 最大3手のランダムプレイアウトに変更
-                valid_moves = self.get_valid_moves(simulated_board, current_stone)
-                if not valid_moves:
-                    break
-                random_move = random.choice(valid_moves)
-                simulated_board = self.apply_move(simulated_board, current_stone, random_move[0], random_move[1])
-                current_stone = 3 - current_stone
-            scores += self.evaluate_board(simulated_board, stone)
-            return scores
-
         with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(simulate_move, move): move for move in moves}
-            while time.time() - start_time < self.time_limit:
-                for future in futures:
-                    move = futures[future]
-                    try:
-                        move_scores[move] += future.result(timeout=0.5)  # 各シミュレーションにタイムアウトを設定
-                    except:
-                        pass
+            futures = {executor.submit(self.simulate_move, board, stone, move): move for move in moves}
+            for future in as_completed(futures):
+                move = futures[future]
+                try:
+                    move_scores[move] += future.result()
+                except:
+                    pass
+                if time.time() - start_time >= self.time_limit:
+                    break
 
         best_move = max(move_scores, key=move_scores.get)
         return best_move
