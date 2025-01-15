@@ -11,7 +11,8 @@ class weareteamphysAI:
         self.start_time = None
         self.time_used = 0
         self.corner_positions = [(0, 0), (0, 5), (5, 0), (5, 5)]
-        self.bad_positions = [
+        self.central_positions = [(2, 2), (2, 3), (3, 2), (3, 3)]
+        self.danger_zone = [
             (0, 1), (1, 0), (1, 1),
             (0, 4), (1, 5), (1, 4),
             (4, 0), (5, 1), (4, 1),
@@ -62,27 +63,37 @@ class weareteamphysAI:
                 return True
         return False
 
-    def evaluate_board(self, board, stone, is_endgame=False):
+    def evaluate_board(self, board, stone, move_count):
+        """評価関数"""
         score = 0
         for y in range(len(board)):
             for x in range(len(board[0])):
                 if board[y][x] == stone:
-                    if (x, y) in self.corner_positions:
-                        score += 100  # 角は最重要
-                    elif (x, y) in self.bad_positions:
-                        score -= 50  # 危険な位置を避ける
+                    if (x, y) in self.central_positions:
+                        score += 100  # 中央を最優先
+                    elif (x, y) in self.corner_positions:
+                        score += 50  # 角は次点
+                    elif (x, y) in self.danger_zone:
+                        score -= 30  # 危険地帯は減点
                     else:
-                        score += 1  # 通常の位置は微加点
-        if is_endgame:
-            score += sum(row.count(stone) for row in board) * 5  # 終盤は石の数を重視
+                        score += 1
+
+        # 序盤：中央を重視、中盤以降：外側への展開を評価
+        if move_count < 20:
+            score += sum(1 for x, y in self.central_positions if board[y][x] == stone) * 20
+        else:
+            score += sum(1 for x, y in self.corner_positions if board[y][x] == stone) * 10
+
+        # 相手の選択肢を減らす
+        opponent_moves = len(self.get_valid_moves(board, 3 - stone))
+        score -= opponent_moves * 5  # 相手の手数を抑える
+
         return score
 
-    def alpha_beta(self, board, depth, alpha, beta, maximizing, stone, start_time):
+    def alpha_beta(self, board, depth, alpha, beta, maximizing, stone, move_count, start_time):
         legal_moves = self.get_valid_moves(board, stone)
-        is_endgame = sum(row.count(BLACK) + row.count(WHITE) for row in board) > 50
-
         if depth == 0 or not legal_moves or time.time() - start_time > self.max_time_per_turn:
-            return self.evaluate_board(board, stone, is_endgame), None
+            return self.evaluate_board(board, stone, move_count), None
 
         best_move = None
         if maximizing:
@@ -90,7 +101,7 @@ class weareteamphysAI:
             for move in legal_moves:
                 x, y = move
                 simulated_board = self.apply_move(board, stone, x, y)
-                eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, False, 3 - stone, start_time)
+                eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, False, 3 - stone, move_count + 1, start_time)
                 if eval > max_eval:
                     max_eval = eval
                     best_move = move
@@ -103,7 +114,7 @@ class weareteamphysAI:
             for move in legal_moves:
                 x, y = move
                 simulated_board = self.apply_move(board, stone, x, y)
-                eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, True, 3 - stone, start_time)
+                eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, True, 3 - stone, move_count + 1, start_time)
                 if eval < min_eval:
                     min_eval = eval
                     best_move = move
@@ -119,7 +130,7 @@ class weareteamphysAI:
         best_move = None
 
         while time.time() - self.start_time < min(self.max_time_per_turn, remaining_time):
-            eval, move = self.alpha_beta(board, depth, float('-inf'), float('inf'), True, stone, self.start_time)
+            eval, move = self.alpha_beta(board, depth, float('-inf'), float('inf'), True, stone, 0, self.start_time)
             if move:
                 best_move = move
             depth += 1
