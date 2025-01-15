@@ -68,7 +68,7 @@ def apply_move(board, stone, x, y):
             for flip_x, flip_y in tiles_to_flip:
                 board[flip_y][flip_x] = stone
 
-class DynamicMinimaxAI(object):
+class teamphysAI(object):
     def face(self):
         return "🎓nori"  
 
