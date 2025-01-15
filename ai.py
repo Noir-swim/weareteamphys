@@ -1,16 +1,15 @@
 import math
 import random
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 BLACK = 1
 WHITE = 2
 
 class weareteamphysAI:
-    def __init__(self, max_think_time=30, total_game_time=60):
-        self.max_think_time = max_think_time  # 各手の最大思考時間 (秒)
+    def __init__(self, total_game_time=60, max_depth=8):
         self.total_game_time = total_game_time  # ゲーム全体の最大思考時間 (秒)
-        self.used_time = 0  # 使用済みの思考時間
+        self.used_time = 0  # 現在までに使用した思考時間
+        self.max_depth = max_depth  # 最大探索深さ
         self.corners = [(0, 0), (0, 5), (5, 0), (5, 5)]
         self.danger_zones = [
             (0, 1), (1, 0), (1, 1),  # 左上
@@ -84,45 +83,43 @@ class weareteamphysAI:
         score += (my_mobility - opponent_mobility) * 15
         return score
 
-    def simulate_move(self, board, stone, move, depth=5):
-        scores = 0
-        simulated_board = self.apply_move(board, stone, move[0], move[1])
-        current_stone = 3 - stone
-        for _ in range(depth):  # ランダムプレイアウトの深さ
-            valid_moves = self.get_valid_moves(simulated_board, current_stone)
-            if not valid_moves:
-                break
-            random_move = random.choice(valid_moves)
-            simulated_board = self.apply_move(simulated_board, current_stone, random_move[0], random_move[1])
-            current_stone = 3 - current_stone
-        scores += self.evaluate_board(simulated_board, stone)
-        return scores
+    def alpha_beta(self, board, depth, alpha, beta, maximizing_player, stone):
+        if depth == 0 or not self.get_valid_moves(board, stone):
+            return self.evaluate_board(board, stone), None
 
-    def mcts(self, board, stone):
-        start_time = time.time()
-        moves = self.get_valid_moves(board, stone)
-        if not moves:
-            return None
-        move_scores = {move: 0 for move in moves}
-
-        with ThreadPoolExecutor() as executor:
-            futures = {executor.submit(self.simulate_move, board, stone, move): move for move in moves}
-            for future in as_completed(futures):
-                move = futures[future]
-                try:
-                    move_scores[move] += future.result()
-                except:
-                    pass
-                if time.time() - start_time >= self.max_think_time:
+        best_move = None
+        if maximizing_player:
+            max_eval = float('-inf')
+            for move in self.get_valid_moves(board, stone):
+                new_board = self.apply_move(board, stone, move[0], move[1])
+                eval, _ = self.alpha_beta(new_board, depth - 1, alpha, beta, False, 3 - stone)
+                if eval > max_eval:
+                    max_eval = eval
+                    best_move = move
+                alpha = max(alpha, eval)
+                if beta <= alpha:
                     break
-
-        best_move = max(move_scores, key=move_scores.get)
-        return best_move
+            return max_eval, best_move
+        else:
+            min_eval = float('inf')
+            for move in self.get_valid_moves(board, stone):
+                new_board = self.apply_move(board, stone, move[0], move[1])
+                eval, _ = self.alpha_beta(new_board, depth - 1, alpha, beta, True, 3 - stone)
+                if eval < min_eval:
+                    min_eval = eval
+                    best_move = move
+                beta = min(beta, eval)
+                if beta <= alpha:
+                    break
+            return min_eval, best_move
 
     def place(self, board, stone):
-        if self.used_time >= self.total_game_time:
-            return random.choice(self.get_valid_moves(board, stone))
         start_time = time.time()
-        best_move = self.mcts(board, stone)
-        self.used_time += time.time() - start_time
+        depth = 4  # 初期深さ
+        best_move = None
+        while time.time() - start_time < self.total_game_time / 60:
+            eval, move = self.alpha_beta(board, depth, float('-inf'), float('inf'), True, stone)
+            if move:
+                best_move = move
+            depth += 1
         return best_move
