@@ -1,20 +1,15 @@
 import math
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 BLACK = 1
 WHITE = 2
 
 class weareteamphysAI:
-    def __init__(self, max_time=10):
-        self.max_time = max_time  # 1手あたりの最大思考時間（秒）
-        self.corners = [(0, 0), (0, 5), (5, 0), (5, 5)]
-        self.danger_zones = [
-            (0, 1), (1, 0), (1, 1),  # 左上
-            (0, 4), (1, 4), (1, 5),  # 右上
-            (4, 0), (4, 1), (5, 1),  # 左下
-            (4, 4), (4, 5), (5, 4),  # 右下
-        ]
+    def __init__(self, max_time_per_game=60):
+        self.max_time_per_game = max_time_per_game  # ゲーム全体の最大思考時間
+        self.max_time_per_turn = max_time_per_game / 36  # 平均的な最大手数に基づく1手あたりの時間
+        self.start_time = None
+        self.time_used = 0
 
     def face(self):
         return "🎓nori"
@@ -64,31 +59,20 @@ class weareteamphysAI:
         return False
 
     def evaluate_board(self, board, stone):
-        """評価関数"""
-        weights = [
-            [1000, -200, 50, 50, -200, 1000],
-            [-200, -500, 10, 10, -500, -200],
-            [50, 10, 5, 5, 10, 50],
-            [50, 10, 5, 5, 10, 50],
-            [-200, -500, 10, 10, -500, -200],
-            [1000, -200, 50, 50, -200, 1000],
-        ]
+        """簡易評価関数"""
         score = 0
         for y in range(len(board)):
             for x in range(len(board[0])):
                 if board[y][x] == stone:
-                    score += weights[y][x]
+                    score += 1
                 elif board[y][x] == 3 - stone:
-                    score -= weights[y][x]
-        my_mobility = len(self.get_valid_moves(board, stone))
-        opponent_mobility = len(self.get_valid_moves(board, 3 - stone))
-        score += (my_mobility - opponent_mobility) * 10
+                    score -= 1
         return score
 
-    def alpha_beta(self, board, depth, alpha, beta, maximizing, stone):
+    def alpha_beta(self, board, depth, alpha, beta, maximizing, stone, start_time):
         """α-β枝刈りによる探索"""
         legal_moves = self.get_valid_moves(board, stone)
-        if depth == 0 or not legal_moves:
+        if depth == 0 or not legal_moves or time.time() - start_time > self.max_time_per_turn:
             return self.evaluate_board(board, stone), None
 
         best_move = None
@@ -97,7 +81,7 @@ class weareteamphysAI:
             for move in legal_moves:
                 x, y = move
                 new_board = self.apply_move(board, stone, x, y)
-                eval, _ = self.alpha_beta(new_board, depth - 1, alpha, beta, False, 3 - stone)
+                eval, _ = self.alpha_beta(new_board, depth - 1, alpha, beta, False, 3 - stone, start_time)
                 if eval > max_eval:
                     max_eval = eval
                     best_move = move
@@ -110,7 +94,7 @@ class weareteamphysAI:
             for move in legal_moves:
                 x, y = move
                 new_board = self.apply_move(board, stone, x, y)
-                eval, _ = self.alpha_beta(new_board, depth - 1, alpha, beta, True, 3 - stone)
+                eval, _ = self.alpha_beta(new_board, depth - 1, alpha, beta, True, 3 - stone, start_time)
                 if eval < min_eval:
                     min_eval = eval
                     best_move = move
@@ -121,12 +105,16 @@ class weareteamphysAI:
 
     def place(self, board, stone):
         """最適な手を探索"""
-        start_time = time.time()
-        depth = 4
+        self.start_time = time.time()
+        remaining_time = self.max_time_per_game - self.time_used
+        depth = 1
         best_move = None
-        while time.time() - start_time < self.max_time:
-            eval, move = self.alpha_beta(board, depth, float('-inf'), float('inf'), True, stone)
+
+        while time.time() - self.start_time < min(self.max_time_per_turn, remaining_time):
+            eval, move = self.alpha_beta(board, depth, float('-inf'), float('inf'), True, stone, self.start_time)
             if move:
                 best_move = move
             depth += 1
+
+        self.time_used += time.time() - self.start_time
         return best_move
