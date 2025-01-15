@@ -7,13 +7,11 @@ WHITE = 2
 class weareteamphysAI:
     def __init__(self, max_time_per_game=60):
         self.max_time_per_game = max_time_per_game
-        self.max_time_per_turn = max_time_per_game / 36
+        self.max_time_per_turn = max_time_per_game / 36  # ゲーム全体で1分を目指す
         self.start_time = None
-        self.time_used = 0
         self.corner_positions = [(0, 0), (0, 5), (5, 0), (5, 5)]
-        self.central_positions = [(2, 2), (2, 3), (3, 2), (3, 3)]
         self.danger_zone = [
-            (0, 1), (1, 0), (1, 1),
+            (0, 1), (1, 0), (1, 1), 
             (0, 4), (1, 5), (1, 4),
             (4, 0), (5, 1), (4, 1),
             (5, 4), (4, 5), (4, 4)
@@ -63,45 +61,54 @@ class weareteamphysAI:
                 return True
         return False
 
-    def evaluate_board(self, board, stone, move_count):
-        """評価関数"""
+    def evaluate_board(self, board, stone):
+        """評価関数: 序盤・中盤・終盤に応じた重みづけ"""
         score = 0
+        opponent = 3 - stone
+        total_stones = sum(row.count(BLACK) + row.count(WHITE) for row in board)
+
         for y in range(len(board)):
             for x in range(len(board[0])):
                 if board[y][x] == stone:
-                    if (x, y) in self.central_positions:
-                        score += 100  # 中央を最優先
-                    elif (x, y) in self.corner_positions:
-                        score += 50  # 角は次点
+                    # 角を高評価、危険地帯を減点
+                    if (x, y) in self.corner_positions:
+                        score += 100
                     elif (x, y) in self.danger_zone:
-                        score -= 30  # 危険地帯は減点
+                        score -= 50
                     else:
                         score += 1
+                elif board[y][x] == opponent:
+                    if (x, y) in self.corner_positions:
+                        score -= 100
+                    elif (x, y) in self.danger_zone:
+                        score += 50
+                    else:
+                        score -= 1
 
-        # 序盤：中央を重視、中盤以降：外側への展開を評価
-        if move_count < 20:
-            score += sum(1 for x, y in self.central_positions if board[y][x] == stone) * 20
-        else:
-            score += sum(1 for x, y in self.corner_positions if board[y][x] == stone) * 10
+        # モビリティ（手数）の評価
+        my_moves = len(self.get_valid_moves(board, stone))
+        opponent_moves = len(self.get_valid_moves(board, opponent))
+        mobility_score = (my_moves - opponent_moves) * 10
 
-        # 相手の選択肢を減らす
-        opponent_moves = len(self.get_valid_moves(board, 3 - stone))
-        score -= opponent_moves * 5  # 相手の手数を抑える
+        # 石の数重視（終盤）
+        if total_stones > 30:
+            score += sum(row.count(stone) for row in board) * 5
 
-        return score
+        return score + mobility_score
 
-    def alpha_beta(self, board, depth, alpha, beta, maximizing, stone, move_count, start_time):
+    def alpha_beta(self, board, depth, alpha, beta, maximizing, stone):
         legal_moves = self.get_valid_moves(board, stone)
-        if depth == 0 or not legal_moves or time.time() - start_time > self.max_time_per_turn:
-            return self.evaluate_board(board, stone, move_count), None
+        if depth == 0 or not legal_moves or time.time() - self.start_time > self.max_time_per_turn:
+            return self.evaluate_board(board, stone), None
 
         best_move = None
+
         if maximizing:
-            max_eval = float('-inf')
+            max_eval = -math.inf
             for move in legal_moves:
                 x, y = move
                 simulated_board = self.apply_move(board, stone, x, y)
-                eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, False, 3 - stone, move_count + 1, start_time)
+                eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, False, 3 - stone)
                 if eval > max_eval:
                     max_eval = eval
                     best_move = move
@@ -110,11 +117,11 @@ class weareteamphysAI:
                     break
             return max_eval, best_move
         else:
-            min_eval = float('inf')
+            min_eval = math.inf
             for move in legal_moves:
                 x, y = move
                 simulated_board = self.apply_move(board, stone, x, y)
-                eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, True, 3 - stone, move_count + 1, start_time)
+                eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, True, 3 - stone)
                 if eval < min_eval:
                     min_eval = eval
                     best_move = move
@@ -125,15 +132,13 @@ class weareteamphysAI:
 
     def place(self, board, stone):
         self.start_time = time.time()
-        remaining_time = self.max_time_per_game - self.time_used
         depth = 1
         best_move = None
 
-        while time.time() - self.start_time < min(self.max_time_per_turn, remaining_time):
-            eval, move = self.alpha_beta(board, depth, float('-inf'), float('inf'), True, stone, 0, self.start_time)
+        while time.time() - self.start_time < self.max_time_per_turn:
+            eval, move = self.alpha_beta(board, depth, float('-inf'), float('inf'), True, stone)
             if move:
                 best_move = move
             depth += 1
 
-        self.time_used += time.time() - self.start_time
         return best_move
