@@ -7,7 +7,7 @@ WHITE = 2
 class weareteamphysAI:
     def __init__(self, max_time_per_game=60):
         self.max_time_per_game = max_time_per_game
-        self.max_time_per_turn = max_time_per_game / 36  # 1ターンあたりの時間配分
+        self.max_time_per_turn = max_time_per_game / 36  # 1ターンあたりの時間
         self.start_time = None
 
     def face(self):
@@ -32,12 +32,12 @@ class weareteamphysAI:
         return new_board
 
     def get_valid_moves(self, board, stone):
-        valid_moves = []
+        moves = []
         for y in range(len(board)):
             for x in range(len(board[0])):
                 if self.can_place_x_y(board, stone, x, y):
-                    valid_moves.append((x, y))
-        return valid_moves
+                    moves.append((x, y))
+        return moves
 
     def can_place_x_y(self, board, stone, x, y):
         if board[y][x] != 0:
@@ -57,40 +57,54 @@ class weareteamphysAI:
         return False
 
     def evaluate_board(self, board, stone):
-        """単純な石数の評価関数"""
+        """評価関数"""
+        weights = [
+            [100, -20, 10, 10, -20, 100],
+            [-20, -50, -2, -2, -50, -20],
+            [10, -2, 1, 1, -2, 10],
+            [10, -2, 1, 1, -2, 10],
+            [-20, -50, -2, -2, -50, -20],
+            [100, -20, 10, 10, -20, 100],
+        ]
+
         score = 0
-        for row in board:
-            score += row.count(stone)
+        for y in range(len(board)):
+            for x in range(len(board[0])):
+                if board[y][x] == stone:
+                    score += weights[y][x]
+                elif board[y][x] == 3 - stone:
+                    score -= weights[y][x]
         return score
 
     def alpha_beta(self, board, depth, alpha, beta, maximizing, stone):
-        """ゲーム木探索"""
-        valid_moves = self.get_valid_moves(board, stone)
-        if depth == 0 or not valid_moves or time.time() - self.start_time > self.max_time_per_turn:
+        legal_moves = self.get_valid_moves(board, stone)
+        if depth == 0 or not legal_moves or time.time() - self.start_time > self.max_time_per_turn:
             return self.evaluate_board(board, stone), None
 
         best_move = None
 
         if maximizing:
             max_eval = -math.inf
-            for x, y in valid_moves:
+            for move in legal_moves:
+                x, y = move
                 simulated_board = self.apply_move(board, stone, x, y)
                 eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, False, 3 - stone)
                 if eval > max_eval:
                     max_eval = eval
-                    best_move = (x, y)
+                    best_move = move
                 alpha = max(alpha, eval)
                 if beta <= alpha:
                     break
             return max_eval, best_move
         else:
             min_eval = math.inf
-            for x, y in valid_moves:
+            for move in legal_moves:
+                x, y = move
                 simulated_board = self.apply_move(board, stone, x, y)
                 eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, True, 3 - stone)
                 if eval < min_eval:
                     min_eval = eval
-                    best_move = (x, y)
+                    best_move = move
                 beta = min(beta, eval)
                 if beta <= alpha:
                     break
@@ -98,7 +112,7 @@ class weareteamphysAI:
 
     def place(self, board, stone):
         self.start_time = time.time()
-        depth = 1
+        depth = 3
         best_move = None
 
         while time.time() - self.start_time < self.max_time_per_turn:
