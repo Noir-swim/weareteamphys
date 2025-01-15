@@ -7,7 +7,7 @@ BLACK = 1
 WHITE = 2
 
 class weareteamphysAI:
-    def __init__(self, time_limit=5):
+    def __init__(self, time_limit=30):
         self.time_limit = time_limit  # 最大思考時間 (秒)
         self.corners = [(0, 0), (0, 5), (5, 0), (5, 5)]
         self.danger_zones = [
@@ -93,7 +93,7 @@ class weareteamphysAI:
             scores = 0
             simulated_board = self.apply_move(board, stone, move[0], move[1])
             current_stone = 3 - stone
-            for _ in range(10):  # 最大10手のランダムプレイアウト
+            for _ in range(5):  # 最大5手のランダムプレイアウトに変更
                 valid_moves = self.get_valid_moves(simulated_board, current_stone)
                 if not valid_moves:
                     break
