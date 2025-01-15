@@ -73,9 +73,6 @@ class TeamPhysAI(object):
         return "🎓nori"  
 
     def get_progressive_evaluation(self, board):
-        """
-        ゲームの進行度に応じて動的に評価表を返す
-        """
         empty_count = sum(row.count(0) for row in board)
         total_cells = len(board) * len(board[0])
 
