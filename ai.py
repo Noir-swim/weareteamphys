@@ -7,7 +7,7 @@ BLACK = 1
 WHITE = 2
 
 class weareteamphysAI:
-    def __init__(self, time_limit=10):
+    def __init__(self, time_limit=15):
         self.time_limit = time_limit  # 最大思考時間 (秒)
         self.corners = [(0, 0), (0, 5), (5, 0), (5, 5)]
         self.danger_zones = [
@@ -77,13 +77,16 @@ class weareteamphysAI:
                     score += weights[y][x]
                 elif board[y][x] == 3 - stone:
                     score -= weights[y][x]
+        my_mobility = len(self.get_valid_moves(board, stone))
+        opponent_mobility = len(self.get_valid_moves(board, 3 - stone))
+        score += (my_mobility - opponent_mobility) * 15  # モビリティの評価を強化
         return score
 
-    def simulate_move(self, board, stone, move):
+    def simulate_move(self, board, stone, move, depth=5):
         scores = 0
         simulated_board = self.apply_move(board, stone, move[0], move[1])
         current_stone = 3 - stone
-        for _ in range(3):  # 最大3手のランダムプレイアウト
+        for _ in range(depth):  # ランダムプレイアウトの深さを5手に
             valid_moves = self.get_valid_moves(simulated_board, current_stone)
             if not valid_moves:
                 break
