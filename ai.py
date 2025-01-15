@@ -1,15 +1,9 @@
 import math
-import time
 
 BLACK = 1
 WHITE = 2
 
 class weareteamphysAI:
-    def __init__(self, max_time_per_game=60):
-        self.max_time_per_game = max_time_per_game
-        self.max_time_per_turn = max_time_per_game / 36  # 1ターンあたりの時間
-        self.start_time = None
-
     def face(self):
         return "🎓nori"
 
@@ -24,11 +18,11 @@ class weareteamphysAI:
         for dx, dy in directions:
             nx, ny = x + dx, y + dy
             stones_to_flip = []
-            while 0 <= nx < 6 and 0 <= ny < 6 and new_board[ny][nx] == opponent:
+            while 0 <= nx < len(new_board[0]) and 0 <= ny < len(new_board) and new_board[ny][nx] == opponent:
                 stones_to_flip.append((nx, ny))
                 nx += dx
                 ny += dy
-            if stones_to_flip and 0 <= nx < 6 and 0 <= ny < 6 and new_board[ny][nx] == stone:
+            if stones_to_flip and 0 <= nx < len(new_board[0]) and 0 <= ny < len(new_board) and new_board[ny][nx] == stone:
                 for fx, fy in stones_to_flip:
                     new_board[fy][fx] = stone
         return new_board
@@ -52,16 +46,15 @@ class weareteamphysAI:
         for dx, dy in directions:
             nx, ny = x + dx, y + dy
             found_opponent = False
-            while 0 <= nx < 6 and 0 <= ny < 6 and board[ny][nx] == opponent:
+            while 0 <= nx < len(board[0]) and 0 <= ny < len(board) and board[ny][nx] == opponent:
                 nx += dx
                 ny += dy
                 found_opponent = True
-            if found_opponent and 0 <= nx < 6 and 0 <= ny < 6 and board[ny][nx] == stone:
+            if found_opponent and 0 <= nx < len(board[0]) and 0 <= ny < len(board) and board[ny][nx] == stone:
                 return True
         return False
 
     def evaluate_board(self, board, stone):
-        """評価関数"""
         weights = [
             [100, -20, 10, 10, -20, 100],
             [-20, -50, -2, -2, -50, -20],
@@ -82,7 +75,7 @@ class weareteamphysAI:
 
     def alpha_beta(self, board, depth, alpha, beta, maximizing, stone):
         legal_moves = self.get_valid_moves(board, stone)
-        if depth == 0 or not legal_moves or time.time() - self.start_time > self.max_time_per_turn:
+        if depth == 0 or not legal_moves:
             return self.evaluate_board(board, stone), None
 
         best_move = None
@@ -115,14 +108,19 @@ class weareteamphysAI:
             return min_eval, best_move
 
     def place(self, board, stone):
-        self.start_time = time.time()
-        depth = 3  # 初期の探索深さ
-        best_move = None
+        valid_moves = self.get_valid_moves(board, stone)
+        if not valid_moves:
+            return None
 
-        while time.time() - self.start_time < self.max_time_per_turn:
-            eval, move = self.alpha_beta(board, depth, float('-inf'), float('inf'), True, stone)
-            if move:
-                best_move = move
-            depth += 1  # 時間が許す限り探索を深める
+        best_move = None
+        best_score = -math.inf
+
+        for x, y in valid_moves:
+            temp_board = self.apply_move(board, stone, x, y)
+            score, _ = self.alpha_beta(temp_board, depth=3, alpha=-math.inf, beta=math.inf, maximizing=False, stone=3 - stone)
+
+            if score > best_score:
+                best_score = score
+                best_move = (x, y)
 
         return best_move
