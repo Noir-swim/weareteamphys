@@ -7,15 +7,8 @@ WHITE = 2
 class weareteamphysAI:
     def __init__(self, max_time_per_game=60):
         self.max_time_per_game = max_time_per_game
-        self.max_time_per_turn = max_time_per_game / 36  # ゲーム全体で1分を目指す
+        self.max_time_per_turn = max_time_per_game / 36  # 1ターンあたりの時間配分
         self.start_time = None
-        self.corner_positions = [(0, 0), (0, 5), (5, 0), (5, 5)]
-        self.danger_zone = [
-            (0, 1), (1, 0), (1, 1), 
-            (0, 4), (1, 5), (1, 4),
-            (4, 0), (5, 1), (4, 1),
-            (5, 4), (4, 5), (4, 4)
-        ]
 
     def face(self):
         return "🎓nori"
@@ -25,6 +18,7 @@ class weareteamphysAI:
         new_board[y][x] = stone
         opponent = 3 - stone
         directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
         for dx, dy in directions:
             nx, ny = x + dx, y + dy
             stones_to_flip = []
@@ -50,6 +44,7 @@ class weareteamphysAI:
             return False
         opponent = 3 - stone
         directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
         for dx, dy in directions:
             nx, ny = x + dx, y + dy
             found_opponent = False
@@ -62,69 +57,40 @@ class weareteamphysAI:
         return False
 
     def evaluate_board(self, board, stone):
-        """評価関数: 序盤・中盤・終盤に応じた重みづけ"""
+        """単純な石数の評価関数"""
         score = 0
-        opponent = 3 - stone
-        total_stones = sum(row.count(BLACK) + row.count(WHITE) for row in board)
-
-        for y in range(len(board)):
-            for x in range(len(board[0])):
-                if board[y][x] == stone:
-                    # 角を高評価、危険地帯を減点
-                    if (x, y) in self.corner_positions:
-                        score += 100
-                    elif (x, y) in self.danger_zone:
-                        score -= 50
-                    else:
-                        score += 1
-                elif board[y][x] == opponent:
-                    if (x, y) in self.corner_positions:
-                        score -= 100
-                    elif (x, y) in self.danger_zone:
-                        score += 50
-                    else:
-                        score -= 1
-
-        # モビリティ（手数）の評価
-        my_moves = len(self.get_valid_moves(board, stone))
-        opponent_moves = len(self.get_valid_moves(board, opponent))
-        mobility_score = (my_moves - opponent_moves) * 10
-
-        # 石の数重視（終盤）
-        if total_stones > 30:
-            score += sum(row.count(stone) for row in board) * 5
-
-        return score + mobility_score
+        for row in board:
+            score += row.count(stone)
+        return score
 
     def alpha_beta(self, board, depth, alpha, beta, maximizing, stone):
-        legal_moves = self.get_valid_moves(board, stone)
-        if depth == 0 or not legal_moves or time.time() - self.start_time > self.max_time_per_turn:
+        """ゲーム木探索"""
+        valid_moves = self.get_valid_moves(board, stone)
+        if depth == 0 or not valid_moves or time.time() - self.start_time > self.max_time_per_turn:
             return self.evaluate_board(board, stone), None
 
         best_move = None
 
         if maximizing:
             max_eval = -math.inf
-            for move in legal_moves:
-                x, y = move
+            for x, y in valid_moves:
                 simulated_board = self.apply_move(board, stone, x, y)
                 eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, False, 3 - stone)
                 if eval > max_eval:
                     max_eval = eval
-                    best_move = move
+                    best_move = (x, y)
                 alpha = max(alpha, eval)
                 if beta <= alpha:
                     break
             return max_eval, best_move
         else:
             min_eval = math.inf
-            for move in legal_moves:
-                x, y = move
+            for x, y in valid_moves:
                 simulated_board = self.apply_move(board, stone, x, y)
                 eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, True, 3 - stone)
                 if eval < min_eval:
                     min_eval = eval
-                    best_move = move
+                    best_move = (x, y)
                 beta = min(beta, eval)
                 if beta <= alpha:
                     break
