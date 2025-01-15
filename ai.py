@@ -1,132 +1,126 @@
 import math
 import random
-import copy
-from concurrent.futures import ThreadPoolExecutor
-
 BLACK = 1
 WHITE = 2
-
+# 6×6のオセロボードの初期状態
+board = [
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 1, 2, 0, 0],
+    [0, 0, 2, 1, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+]
+def can_place_x_y(board, stone, x, y):
+    if board[y][x] != 0:
+        return False
+    opponent = 3 - stone
+    directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    for dx, dy in directions:
+        nx, ny = x + dx, y + dy
+        found_opponent = False
+        while 0 <= nx < len(board[0]) and 0 <= ny < len(board) and board[ny][nx] == opponent:
+            nx += dx
+            ny += dy
+            found_opponent = True
+        if found_opponent and 0 <= nx < len(board[0]) and 0 <= ny < len(board) and board[ny][nx] == stone:
+            return True
+    return False
+def can_place(board, stone):
+    for y in range(len(board)):
+        for x in range(len(board[0])):
+            if can_place_x_y(board, stone, x, y):
+                return True
+    return False
+def get_valid_moves(board, stone):
+    moves = []
+    for y in range(len(board)):
+        for x in range(len(board[0])):
+            if can_place_x_y(board, stone, x, y):
+                moves.append((x, y))
+    return moves
+def apply_move(board, stone, x, y):
+    opponent = 3 - stone
+    directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    board[y][x] = stone
+    for dx, dy in directions:
+        nx, ny = x + dx, y + dy
+        tiles_to_flip = []
+        while 0 <= nx < len(board[0]) and 0 <= ny < len(board) and board[ny][nx] == opponent:
+            tiles_to_flip.append((nx, ny))
+            nx += dx
+            ny += dy
+        if 0 <= nx < len(board[0]) and 0 <= ny < len(board) and board[ny][nx] == stone:
+            for flip_x, flip_y in tiles_to_flip:
+                board[flip_y][flip_x] = stone
 class weareteamphysAI(object):
     def face(self):
-        return "🎓nori"
-
-    def __init__(self):
-        self.corners = [(0, 0), (0, 5), (5, 0), (5, 5)]
-        self.danger_zones = [
-            (0, 1), (1, 0), (1, 1),  # 左上
-            (0, 4), (1, 4), (1, 5),  # 右上
-            (4, 0), (4, 1), (5, 1),  # 左下
-            (4, 4), (4, 5), (5, 4),  # 右下
-        ]
-
-    def apply_move(self, board, stone, x, y):
-        new_board = [row[:] for row in board]
-        new_board[y][x] = stone
-
-        opponent = 3 - stone
-        directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-
-        for dx, dy in directions:
-            nx, ny = x + dx, y + dy
-            stones_to_flip = []
-
-            while 0 <= nx < len(new_board[0]) and 0 <= ny < len(new_board) and new_board[ny][nx] == opponent:
-                stones_to_flip.append((nx, ny))
-                nx += dx
-                ny += dy
-
-            if stones_to_flip and 0 <= nx < len(new_board[0]) and 0 <= ny < len(new_board) and new_board[ny][nx] == stone:
-                for flip_x, flip_y in stones_to_flip:
-                    new_board[flip_y][flip_x] = stone
-
-        return new_board
-
-    def get_valid_moves(self, board, stone):
-        valid_moves = []
-        for y in range(len(board)):
-            for x in range(len(board[0])):
-                if self.can_place_x_y(board, stone, x, y):
-                    valid_moves.append((x, y))
-        return valid_moves
-
-    def can_place_x_y(self, board, stone, x, y):
-        if board[y][x] != 0:
-            return False
-
-        opponent = 3 - stone
-        directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-
-        for dx, dy in directions:
-            nx, ny = x + dx, y + dy
-            found_opponent = False
-
-            while 0 <= nx < len(board[0]) and 0 <= ny < len(board) and board[ny][nx] == opponent:
-                nx += dx
-                ny += dy
-                found_opponent = True
-
-            if found_opponent and 0 <= nx < len(board[0]) and 0 <= ny < len(board) and board[ny][nx] == stone:
-                return True
-
-        return False
-
-    def evaluate_board(self, board, stone, phase):
-        weights = [
-            [1000, -200, 50, 50, -200, 1000],
-            [-200, -500, 10, 10, -500, -200],
-            [50, 10, 5, 5, 10, 50],
-            [50, 10, 5, 5, 10, 50],
-            [-200, -500, 10, 10, -500, -200],
-            [1000, -200, 50, 50, -200, 1000],
-        ]
+        return "🎓nori"  
+    def get_progressive_evaluation(self, board):
+        empty_count = sum(row.count(0) for row in board)
+        total_cells = len(board) * len(board[0])
+        if empty_count > total_cells * 0.6:  # 序盤
+            return [
+                [100, -20, 10, 10, -20, 100],
+                [-20, -50, -2, -2, -50, -20],
+                [ 10,  -2,  1,  1,  -2,  10],
+                [ 10,  -2,  1,  1,  -2,  10],
+                [-20, -50, -2, -2, -50, -20],
+                [100, -20, 10, 10, -20, 100],
+            ]
+        elif empty_count > total_cells * 0.3:  # 中盤
+            return [
+                [ 50, -10, 10, 10, -10,  50],
+                [-10, -20,  5,  5, -20, -10],
+                [ 10,   5,  1,  1,   5,  10],
+                [ 10,   5,  1,  1,   5,  10],
+                [-10, -20,  5,  5, -20, -10],
+                [ 50, -10, 10, 10, -10,  50],
+            ]
+        else:  # 終盤
+            return [
+                [ 10,  5,  5,  5,  5, 10],
+                [  5,  1,  1,  1,  1,  5],
+                [  5,  1,  1,  1,  1,  5],
+                [  5,  1,  1,  1,  1,  5],
+                [  5,  1,  1,  1,  1,  5],
+                [ 10,  5,  5,  5,  5, 10],
+            ]
+    def evaluate_board(self, board):
+        evaluation_table = self.get_progressive_evaluation(board)
         score = 0
         for y in range(len(board)):
             for x in range(len(board[0])):
-                if board[y][x] == stone:
-                    score += weights[y][x]
-                elif board[y][x] == 3 - stone:
-                    score -= weights[y][x]
-
-        my_mobility = len(self.get_valid_moves(board, stone))
-        opponent_mobility = len(self.get_valid_moves(board, 3 - stone))
-        score += (my_mobility - opponent_mobility) * 15
-
+                if board[y][x] == BLACK:
+                    score += evaluation_table[y][x]
+                elif board[y][x] == WHITE:
+                    score -= evaluation_table[y][x]
         return score
-
-    def mcts(self, board, stone, simulations=200):
-        moves = self.get_valid_moves(board, stone)
-        if not moves:
-            return None
-
-        def simulate_move(move):
-            scores = 0
-            for _ in range(simulations // len(moves)):
-                simulated_board = self.apply_move(board, stone, move[0], move[1])
-                current_stone = 3 - stone
-                for _ in range(10):  # 最大10手のランダムプレイアウト
-                    valid_moves = self.get_valid_moves(simulated_board, current_stone)
-                    if not valid_moves:
-                        break
-                    random_move = random.choice(valid_moves)
-                    simulated_board = self.apply_move(simulated_board, current_stone, random_move[0], random_move[1])
-                    current_stone = 3 - current_stone
-                scores += self.evaluate_board(simulated_board, stone, "mid")
-            return scores
-
-        with ThreadPoolExecutor() as executor:
-            results = executor.map(simulate_move, moves)
-
-        move_scores = {move: score for move, score in zip(moves, results)}
-        best_move = max(move_scores, key=move_scores.get)
-        return best_move
-
-    def place(self, board, stone):
-        total_stones = sum(row.count(0) for row in board)
-        if total_stones > 40:
-            phase = "early"
-        elif total_stones > 20:
-            phase = "mid"
+    def minimax(self, board, depth, stone, maximizing_player):
+        if depth == 0 or not can_place(board, stone):
+            return self.evaluate_board(board), None, None
+        valid_moves = get_valid_moves(board, stone)
+        best_move = None
+        if maximizing_player:
+            max_eval = float('-inf')
+            for x, y in valid_moves:
+                temp_board = [row[:] for row in board]
+                apply_move(temp_board, stone, x, y)
+                eval, _, _ = self.minimax(temp_board, depth - 1, 3 - stone, False)
+                if eval > max_eval:
+                    max_eval = eval
+                    best_move = (x, y)
+            return max_eval, best_move[0], best_move[1]
         else:
-            phase = "late"
-
-        return self.mcts(board, stone, simulations=1000)
+            min_eval = float('inf')
+            for x, y in valid_moves:
+                temp_board = [row[:] for row in board]
+                apply_move(temp_board, stone, x, y)
+                eval, _, _ = self.minimax(temp_board, depth - 1, 3 - stone, True)
+                if eval < min_eval:
+                    min_eval = eval
+                    best_move = (x, y)
+            return min_eval, best_move[0], best_move[1]
+    def place(self, board, stone):
+        _, x, y = self.minimax(board, 3, stone, True)
+        return x, y
