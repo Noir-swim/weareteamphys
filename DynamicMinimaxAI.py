@@ -70,7 +70,7 @@ def apply_move(board, stone, x, y):
 
 class DynamicMinimaxAI(object):
     def face(self):
-        return "🎓"  # AIの顔は🎓
+        return "🎓nori"  
 
     def get_progressive_evaluation(self, board):
         """
