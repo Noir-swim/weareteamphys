@@ -6,16 +6,22 @@ WHITE = 2
 
 class weareteamphysAI:
     def __init__(self, max_time_per_game=60):
-        self.max_time_per_game = max_time_per_game  # ゲーム全体の最大思考時間
-        self.max_time_per_turn = max_time_per_game / 36  # 平均的な最大手数に基づく1手あたりの時間
+        self.max_time_per_game = max_time_per_game
+        self.max_time_per_turn = max_time_per_game / 36
         self.start_time = None
         self.time_used = 0
+        self.corner_positions = [(0, 0), (0, 5), (5, 0), (5, 5)]
+        self.bad_positions = [
+            (0, 1), (1, 0), (1, 1),
+            (0, 4), (1, 5), (1, 4),
+            (4, 0), (5, 1), (4, 1),
+            (5, 4), (4, 5), (4, 4)
+        ]
 
     def face(self):
         return "🎓nori"
 
     def apply_move(self, board, stone, x, y):
-        """石を置いた後の盤面を返す"""
         new_board = [row[:] for row in board]
         new_board[y][x] = stone
         opponent = 3 - stone
@@ -33,7 +39,6 @@ class weareteamphysAI:
         return new_board
 
     def get_valid_moves(self, board, stone):
-        """合法手をリストで返す"""
         valid_moves = []
         for y in range(len(board)):
             for x in range(len(board[0])):
@@ -42,7 +47,6 @@ class weareteamphysAI:
         return valid_moves
 
     def can_place_x_y(self, board, stone, x, y):
-        """指定の位置に石を置けるか確認"""
         if board[y][x] != 0:
             return False
         opponent = 3 - stone
@@ -58,30 +62,35 @@ class weareteamphysAI:
                 return True
         return False
 
-    def evaluate_board(self, board, stone):
-        """簡易評価関数"""
+    def evaluate_board(self, board, stone, is_endgame=False):
         score = 0
         for y in range(len(board)):
             for x in range(len(board[0])):
                 if board[y][x] == stone:
-                    score += 1
-                elif board[y][x] == 3 - stone:
-                    score -= 1
+                    if (x, y) in self.corner_positions:
+                        score += 100  # 角は最重要
+                    elif (x, y) in self.bad_positions:
+                        score -= 50  # 危険な位置を避ける
+                    else:
+                        score += 1  # 通常の位置は微加点
+        if is_endgame:
+            score += sum(row.count(stone) for row in board) * 5  # 終盤は石の数を重視
         return score
 
     def alpha_beta(self, board, depth, alpha, beta, maximizing, stone, start_time):
-        """α-β枝刈りによる探索"""
         legal_moves = self.get_valid_moves(board, stone)
+        is_endgame = sum(row.count(BLACK) + row.count(WHITE) for row in board) > 50
+
         if depth == 0 or not legal_moves or time.time() - start_time > self.max_time_per_turn:
-            return self.evaluate_board(board, stone), None
+            return self.evaluate_board(board, stone, is_endgame), None
 
         best_move = None
         if maximizing:
             max_eval = float('-inf')
             for move in legal_moves:
                 x, y = move
-                new_board = self.apply_move(board, stone, x, y)
-                eval, _ = self.alpha_beta(new_board, depth - 1, alpha, beta, False, 3 - stone, start_time)
+                simulated_board = self.apply_move(board, stone, x, y)
+                eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, False, 3 - stone, start_time)
                 if eval > max_eval:
                     max_eval = eval
                     best_move = move
@@ -93,8 +102,8 @@ class weareteamphysAI:
             min_eval = float('inf')
             for move in legal_moves:
                 x, y = move
-                new_board = self.apply_move(board, stone, x, y)
-                eval, _ = self.alpha_beta(new_board, depth - 1, alpha, beta, True, 3 - stone, start_time)
+                simulated_board = self.apply_move(board, stone, x, y)
+                eval, _ = self.alpha_beta(simulated_board, depth - 1, alpha, beta, True, 3 - stone, start_time)
                 if eval < min_eval:
                     min_eval = eval
                     best_move = move
@@ -104,7 +113,6 @@ class weareteamphysAI:
             return min_eval, best_move
 
     def place(self, board, stone):
-        """最適な手を探索"""
         self.start_time = time.time()
         remaining_time = self.max_time_per_game - self.time_used
         depth = 1
