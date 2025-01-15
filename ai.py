@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 BLACK = 1
 WHITE = 2
 
-class AdvancedOthelloAI:
+class weareteamphysAI:
     def face(self):
         return "🎓nori"
 
