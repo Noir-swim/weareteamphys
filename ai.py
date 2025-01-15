@@ -7,7 +7,7 @@ BLACK = 1
 WHITE = 2
 
 class weareteamphysAI:
-    def __init__(self, time_limit=30):
+    def __init__(self, time_limit=10):
         self.time_limit = time_limit  # 最大思考時間 (秒)
         self.corners = [(0, 0), (0, 5), (5, 0), (5, 5)]
         self.danger_zones = [
@@ -77,9 +77,6 @@ class weareteamphysAI:
                     score += weights[y][x]
                 elif board[y][x] == 3 - stone:
                     score -= weights[y][x]
-        my_mobility = len(self.get_valid_moves(board, stone))
-        opponent_mobility = len(self.get_valid_moves(board, 3 - stone))
-        score += (my_mobility - opponent_mobility) * 10
         return score
 
     def mcts(self, board, stone):
@@ -93,7 +90,7 @@ class weareteamphysAI:
             scores = 0
             simulated_board = self.apply_move(board, stone, move[0], move[1])
             current_stone = 3 - stone
-            for _ in range(5):  # 最大5手のランダムプレイアウトに変更
+            for _ in range(3):  # 最大3手のランダムプレイアウトに変更
                 valid_moves = self.get_valid_moves(simulated_board, current_stone)
                 if not valid_moves:
                     break
@@ -104,9 +101,14 @@ class weareteamphysAI:
             return scores
 
         with ThreadPoolExecutor() as executor:
+            futures = {executor.submit(simulate_move, move): move for move in moves}
             while time.time() - start_time < self.time_limit:
-                for move in moves:
-                    move_scores[move] += simulate_move(move)
+                for future in futures:
+                    move = futures[future]
+                    try:
+                        move_scores[move] += future.result(timeout=0.5)  # 各シミュレーションにタイムアウトを設定
+                    except:
+                        pass
 
         best_move = max(move_scores, key=move_scores.get)
         return best_move
