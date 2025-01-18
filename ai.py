@@ -50,6 +50,27 @@ def apply_move(board, stone, x, y):
             for flip_x, flip_y in tiles_to_flip:
                 board[flip_y][flip_x] = stone
 
+def count_stable_discs(board, stone):
+    stable = 0
+    directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    for y in range(len(board)):
+        for x in range(len(board[0])):
+            if board[y][x] == stone:
+                stable_flag = True
+                for dx, dy in directions:
+                    nx, ny = x + dx, y + dy
+                    while 0 <= nx < len(board[0]) and 0 <= ny < len(board):
+                        if board[ny][nx] != stone:
+                            stable_flag = False
+                            break
+                        nx += dx
+                        ny += dy
+                    if not stable_flag:
+                        break
+                if stable_flag:
+                    stable += 1
+    return stable
+
 class weareteamphysAI:
     def face(self):
         return "🎓nori"
@@ -58,36 +79,35 @@ class weareteamphysAI:
         empty_count = sum(row.count(0) for row in board)
         total_cells = len(board) * len(board[0])
 
-        if empty_count > total_cells * 0.6:
+        if empty_count > total_cells * 0.6:  # 序盤
             return [
-                [100, -20, 10, 10, -20, 100],
+                [500, -20, 10, 10, -20, 500],
                 [-20, -50, -2, -2, -50, -20],
                 [10, -2, 1, 1, -2, 10],
                 [10, -2, 1, 1, -2, 10],
                 [-20, -50, -2, -2, -50, -20],
-                [100, -20, 10, 10, -20, 100],
+                [500, -20, 10, 10, -20, 500],
             ]
-        elif empty_count > total_cells * 0.3:
+        elif empty_count > total_cells * 0.3:  # 中盤
             return [
-                [50, -10, 10, 10, -10, 50],
+                [250, -10, 10, 10, -10, 250],
                 [-10, -20, 5, 5, -20, -10],
                 [10, 5, 1, 1, 5, 10],
                 [10, 5, 1, 1, 5, 10],
                 [-10, -20, 5, 5, -20, -10],
-                [50, -10, 10, 10, -10, 50],
+                [250, -10, 10, 10, -10, 250],
             ]
-        else:
+        else:  # 終盤
             return [
-                [10, 5, 5, 5, 5, 10],
-                [5, 1, 1, 1, 1, 5],
-                [5, 1, 1, 1, 1, 5],
-                [5, 1, 1, 1, 1, 5],
-                [5, 1, 1, 1, 1, 5],
-                [10, 5, 5, 5, 5, 10],
+                [500, 100, 100, 100, 100, 500],
+                [100, 50, 50, 50, 50, 100],
+                [100, 50, 10, 10, 50, 100],
+                [100, 50, 10, 10, 50, 100],
+                [100, 50, 50, 50, 50, 100],
+                [500, 100, 100, 100, 100, 500],
             ]
 
     def evaluate_board(self, board):
-        # 評価用テーブルを取得
         evaluation_table = self.get_progressive_evaluation(board)
         score = 0
 
@@ -100,12 +120,16 @@ class weareteamphysAI:
                     score -= evaluation_table[y][x]
 
         # 有効手の数を加味
-        black_moves = len(get_valid_moves(board, BLACK))  # 黒の有効手の数
-        white_moves = len(get_valid_moves(board, WHITE))  # 白の有効手の数
-        mobility_score = (black_moves - white_moves) * 5  # 重み付け（調整可能）
-
-        # スコアに移動性の評価を追加
+        black_moves = len(get_valid_moves(board, BLACK))
+        white_moves = len(get_valid_moves(board, WHITE))
+        mobility_score = (black_moves - white_moves) * 10
         score += mobility_score
+
+        # 安定石の評価を追加
+        stable_black = count_stable_discs(board, BLACK)
+        stable_white = count_stable_discs(board, WHITE)
+        stable_score = (stable_black - stable_white) * 20
+        score += stable_score
 
         return score
 
@@ -144,5 +168,7 @@ class weareteamphysAI:
             return min_eval, best_move
 
     def place(self, board, stone):
-        _, move = self.minimax(board, 5, stone, True)
+        empty_count = sum(row.count(0) for row in board)
+        depth = 3 if empty_count > 20 else 5
+        _, move = self.minimax(board, depth, stone, True)
         return move
