@@ -1,5 +1,4 @@
 import math
-import random
 
 BLACK = 1
 WHITE = 2
@@ -31,19 +30,10 @@ def can_place_x_y(board, stone, x, y):
     return False
 
 def can_place(board, stone):
-    for y in range(len(board)):
-        for x in range(len(board[0])):
-            if can_place_x_y(board, stone, x, y):
-                return True
-    return False
+    return any(can_place_x_y(board, stone, x, y) for y in range(len(board)) for x in range(len(board[0])))
 
 def get_valid_moves(board, stone):
-    moves = []
-    for y in range(len(board)):
-        for x in range(len(board[0])):
-            if can_place_x_y(board, stone, x, y):
-                moves.append((x, y))
-    return moves
+    return [(x, y) for y in range(len(board)) for x in range(len(board[0])) if can_place_x_y(board, stone, x, y)]
 
 def apply_move(board, stone, x, y):
     opponent = 3 - stone
@@ -67,6 +57,7 @@ class weareteamphysAI:
     def get_progressive_evaluation(self, board):
         empty_count = sum(row.count(0) for row in board)
         total_cells = len(board) * len(board[0])
+
         if empty_count > total_cells * 0.6:
             return [
                 [100, -20, 10, 10, -20, 100],
@@ -96,19 +87,32 @@ class weareteamphysAI:
             ]
 
     def evaluate_board(self, board):
+        # 評価用テーブルを取得
         evaluation_table = self.get_progressive_evaluation(board)
         score = 0
+
+        # 基本的な盤面スコア計算
         for y in range(len(board)):
             for x in range(len(board[0])):
                 if board[y][x] == BLACK:
                     score += evaluation_table[y][x]
                 elif board[y][x] == WHITE:
                     score -= evaluation_table[y][x]
+
+        # 有効手の数を加味
+        black_moves = len(get_valid_moves(board, BLACK))  # 黒の有効手の数
+        white_moves = len(get_valid_moves(board, WHITE))  # 白の有効手の数
+        mobility_score = (black_moves - white_moves) * 5  # 重み付け（調整可能）
+
+        # スコアに移動性の評価を追加
+        score += mobility_score
+
         return score
 
     def minimax(self, board, depth, stone, maximizing_player, alpha=-math.inf, beta=math.inf):
         if depth == 0 or not can_place(board, stone):
             return self.evaluate_board(board), None
+
         valid_moves = get_valid_moves(board, stone)
         if maximizing_player:
             max_eval = -math.inf
