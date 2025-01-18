@@ -107,35 +107,63 @@ class weareteamphysAI:
                 [500, 100, 100, 100, 100, 500],
             ]
 
-    def evaluate_board(self, board):
+    def evaluate_board(self, board, last_move=None):
         evaluation_table = self.get_progressive_evaluation(board)
         score = 0
 
-        # 基本的な盤面スコア計算
+        # 1. 盤面の各マスにつけた重みの平均の差
+        board_weight_black = 0
+        board_weight_white = 0
         for y in range(len(board)):
             for x in range(len(board[0])):
                 if board[y][x] == BLACK:
-                    score += evaluation_table[y][x]
+                    board_weight_black += evaluation_table[y][x]
                 elif board[y][x] == WHITE:
-                    score -= evaluation_table[y][x]
+                    board_weight_white += evaluation_table[y][x]
+        board_weight_score = board_weight_black - board_weight_white
+        score += board_weight_score
 
-        # 有効手の数を加味
+        # 2. 合法手数の差
         black_moves = len(get_valid_moves(board, BLACK))
         white_moves = len(get_valid_moves(board, WHITE))
-        mobility_score = (black_moves - white_moves) * 10
+        mobility_score = (black_moves - white_moves) * 5  # 重み付けを調整可能
         score += mobility_score
 
-        # 安定石の評価を追加
+        # 3. 確定石の差
         stable_black = count_stable_discs(board, BLACK)
         stable_white = count_stable_discs(board, WHITE)
-        stable_score = (stable_black - stable_white) * 20
+        stable_score = (stable_black - stable_white) * 10  # 重み付けを調整可能
         score += stable_score
+
+        # 4. 直前の手の開放度
+        if last_move is not None:
+            x, y = last_move
+            opening_count = 0
+            directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+            for dx, dy in directions:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < len(board[0]) and 0 <= ny < len(board) and board[ny][nx] == 0:
+                    opening_count += 1
+            opening_score = -opening_count * 3  # 開放度が高いほどマイナス評価
+            score += opening_score
+
+        # 5. 内側への入り込み度合い
+        inner_score_black = 0
+        inner_score_white = 0
+        for y in range(1, len(board) - 1):
+            for x in range(1, len(board[0]) - 1):
+                if board[y][x] == BLACK:
+                    inner_score_black += 1
+                elif board[y][x] == WHITE:
+                    inner_score_white += 1
+        inner_score = (inner_score_black - inner_score_white) * 2  # 重み付けを調整可能
+        score += inner_score
 
         return score
 
-    def minimax(self, board, depth, stone, maximizing_player, alpha=-math.inf, beta=math.inf):
+    def minimax(self, board, depth, stone, maximizing_player, alpha=-math.inf, beta=math.inf, last_move=None):
         if depth == 0 or not can_place(board, stone):
-            return self.evaluate_board(board), None
+            return self.evaluate_board(board, last_move), None
 
         valid_moves = get_valid_moves(board, stone)
         if maximizing_player:
@@ -144,7 +172,7 @@ class weareteamphysAI:
             for x, y in valid_moves:
                 temp_board = [row[:] for row in board]
                 apply_move(temp_board, stone, x, y)
-                eval, _ = self.minimax(temp_board, depth - 1, 3 - stone, False, alpha, beta)
+                eval, _ = self.minimax(temp_board, depth - 1, 3 - stone, False, alpha, beta, last_move=(x, y))
                 if eval > max_eval:
                     max_eval = eval
                     best_move = (x, y)
@@ -158,7 +186,7 @@ class weareteamphysAI:
             for x, y in valid_moves:
                 temp_board = [row[:] for row in board]
                 apply_move(temp_board, stone, x, y)
-                eval, _ = self.minimax(temp_board, depth - 1, 3 - stone, True, alpha, beta)
+                eval, _ = self.minimax(temp_board, depth - 1, 3 - stone, True, alpha, beta, last_move=(x, y))
                 if eval < min_eval:
                     min_eval = eval
                     best_move = (x, y)
